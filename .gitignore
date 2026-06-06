@@ -43,3 +43,14 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Python
+venv/
+__pycache__/
+*.pyc
+
+# Backend y datos
+lib/backend/data/
+
+# Archivos de macOS
+.DS_Store
