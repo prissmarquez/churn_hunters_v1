@@ -1,37 +1,33 @@
 import pandas as pd
+import os
+import matplotlib.pyplot as plt
 
-# Cargar CSVs
-clientes = pd.read_csv("lib/backend/data/Clientes.csv")
-coolers = pd.read_csv("lib/backend/data/Coolers.csv")
-ventas_train = pd.read_csv("lib/backend/data/sales_churn_train.csv")
-ventas_test = pd.read_csv("lib/backend/data/sales_churn_test.csv")
+DATA_PATH = "lib/backend/data/processed/"
+FILE_NAME = "churn_scores_final.csv"
 
-#Ver primeras filas que tenemos 
-print("Clientes:")
-print(clientes.head(), "\n")
+# Cargar datos
+df = pd.read_csv(os.path.join(DATA_PATH, FILE_NAME))
 
-print("Coolers:")
-print(coolers.head(), "\n")
+# Cantidad total de clientes
+total_clients = df['customer_id'].nunique()
 
-print("Ventas train:")
-print(ventas_train.head(), "\n")
+# Clientes con score >= 0.8 (alto riesgo)
+high_risk_threshold = 0.8
+high_risk = df[df['score'] >= high_risk_threshold]
+num_high_risk = high_risk['customer_id'].nunique()
+percent_high_risk = num_high_risk / total_clients * 100
 
-print("Ventas test:")
-print(ventas_test.head(), "\n")
+print(f"Cantidad total de clientes: {total_clients}")
+print(f"Clientes en alto riesgo (score ≥ {high_risk_threshold}): {num_high_risk}")
+print(f"Porcentaje de clientes en alto riesgo: {percent_high_risk:.2f}%")
 
-#Revisar tipos de datos y nulos
-print("Info Clientes:")
-print(clientes.info(), "\n")
-
-print("Info Coolers:")
-print(coolers.info(), "\n")
-
-print("Info Ventas train:")
-print(ventas_train.info(), "\n")
-
-# Estadísticas básicas
-print("Estadísticas Ventas train:")
-print(ventas_train.describe(), "\n")
-
-print("Estadísticas Coolers:")
-print(coolers.describe(), "\n")
+# Histograma general de scores
+plt.figure(figsize=(8,5))
+plt.hist(df['score'], bins=50, color='skyblue', edgecolor='black')
+plt.title('Distribución de la Probabilidad de Churn')
+plt.xlabel('Probabilidad de Churn')
+plt.ylabel('Cantidad de Clientes')
+plt.grid(axis='y', alpha=0.75)
+plt.axvline(high_risk_threshold, color='red', linestyle='--', label=f'Umbral {high_risk_threshold}')
+plt.legend()
+plt.show()
