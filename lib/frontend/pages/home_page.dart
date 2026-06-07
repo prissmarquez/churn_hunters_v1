@@ -174,6 +174,7 @@ class _HomePageState extends State<HomePage>
 
   String _selectedFilter = 'Alto';
   final List<String> _filterOptions = ['Alto', 'Medio', 'Bajo'];
+  String _selectedSort = 'riesgo_desc';
 
   final TextEditingController _searchController = TextEditingController();
 
@@ -237,6 +238,22 @@ class _HomePageState extends State<HomePage>
     final id = _searchController.text.trim();
     if (id.isEmpty) return;
     _abrirCliente(id);
+  }
+
+  List<Client> get _sortedClients {
+    final list = List<Client>.from(_filteredClients);
+    if (_selectedSort == 'riesgo_asc') {
+      list.sort((a, b) => a.risk.compareTo(b.risk));
+    } else if (_selectedSort == 'estado_az') {
+      list.sort((a, b) => a.state.compareTo(b.state));
+    } else if (_selectedSort == 'estado_za') {
+      list.sort((a, b) => b.state.compareTo(a.state));
+    } else if (_selectedSort == 'id_az') {
+      list.sort((a, b) => a.id.compareTo(b.id));
+    } else {
+      list.sort((a, b) => b.risk.compareTo(a.risk)); // riesgo_desc (default)
+    }
+    return list;
   }
 
   double get _pctNivel {
@@ -323,6 +340,9 @@ class _HomePageState extends State<HomePage>
                 searchController: _searchController,
                 onSearch: _searchById,
                 onChanged: (value) => _filtrarPorNivel(value),
+                selectedSort: _selectedSort,
+                onSortChanged: (value) =>
+                    setState(() => _selectedSort = value),
               ),
               const SizedBox(height: 24),
               if (_loading)
@@ -332,7 +352,7 @@ class _HomePageState extends State<HomePage>
                 )
               else
                 ClientList(
-                  clients: _filteredClients,
+                  clients: _sortedClients,
                   onTap: (c) => _abrirCliente(c.id),
                 ),
             ],
