@@ -27,7 +27,7 @@ from google import genai
 from google.genai import types
 
 # Modelo de la capa gratis, ideal para análisis + redacción.
-MODELO = "gemini-2.0-flash"
+MODELO = "gemini-2.5-flash"
 
 # Si algún día tienen el valor promedio en pesos por caja, ponlo aquí
 # y el contexto agregará el dinero en riesgo en MXN. Si se queda en None,
