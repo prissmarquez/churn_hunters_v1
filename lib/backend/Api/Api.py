@@ -30,6 +30,7 @@ from pydantic import BaseModel
 from typing import Optional
 
 from Ia import explicar
+from Asistente import construir_contexto_global, responder
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 
@@ -37,10 +38,11 @@ DATA = Path(__file__).resolve().parent.parent / "data"
 ID_CAND   = ["customer_id", "id", "id_cliente", "cliente"]
 PROB_CAND = ["probabilidad_churn", "churn_proba", "prob_churn", "probabilidad",
              "probability", "proba", "score_proba", "churn_probability", "p_churn"]
-SCORE_CAND = ["score", "riesgo", "nivel", "risk_level", "nivel_riesgo"]
+SCORE_CAND = ["nivel_riesgo", "nivel", "riesgo", "risk_level", "score"]
 
 _DB: pd.DataFrame = None
 _MODO = "—"   # "Persona A" o "PROVISIONAL"
+_CONTEXTO = ""  # resumen de la cartera que usa el asistente (se arma al arrancar)
 
 
 def _nivel(p):
@@ -56,9 +58,13 @@ def _detectar(cols, candidatos):
 
 
 def _cargar_scores():
-    """Lee el scores.csv de la Persona A y normaliza columnas."""
-    f = DATA / "scores.csv"
-    if not f.exists():
+    """Lee el scores de la Persona A y normaliza columnas.
+    Busca primero el archivo real del pipeline (processed/churn_scores_final.csv)
+    y como respaldo un scores.csv en data/."""
+    candidatos = [DATA / "processed" / "churn_scores_final.csv",
+                  DATA / "scores.csv"]
+    f = next((p for p in candidatos if p.exists()), None)
+    if f is None:
         return None
     df = pd.read_csv(f)
     col_id = _detectar(df.columns, ID_CAND)
@@ -72,11 +78,15 @@ def _cargar_scores():
     # si viene en escala 0-100, normalizar a 0-1
     if out["probabilidad_churn"].max() > 1.5:
         out["probabilidad_churn"] = out["probabilidad_churn"] / 100.0
-    # nivel: usar el de A si lo trae, si no derivarlo
+    # nivel: usar el de A SOLO si contiene texto alto/medio/bajo; si no, derivarlo
     col_s = _detectar(df.columns, SCORE_CAND)
+    nivel_ok = False
     if col_s:
-        out["riesgo"] = df[col_s].astype(str).str.lower()
-    else:
+        muestra = df[col_s].astype(str).str.lower().str.strip()
+        if muestra.isin(["alto", "medio", "bajo"]).mean() > 0.5:
+            out["riesgo"] = muestra
+            nivel_ok = True
+    if not nivel_ok:
         out["riesgo"] = out["probabilidad_churn"].apply(_nivel)
     keep = ["customer_id", "probabilidad_churn", "riesgo"]
     if "features_influyentes" in df.columns:
@@ -87,7 +97,7 @@ def _cargar_scores():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _DB, _MODO
+    global _DB, _MODO, _CONTEXTO
     feats = pd.read_csv(DATA / "customer_features.csv")
     scores = _cargar_scores()
 
@@ -102,6 +112,7 @@ async def lifespan(app: FastAPI):
         _MODO = "PROVISIONAL (falta scores.csv de Persona A)"
 
     _DB = _DB.set_index("customer_id")
+    _CONTEXTO = construir_contexto_global(_DB)
     print(f"[API] {len(_DB):,} clientes | fuente del score: {_MODO}")
     yield
 
@@ -204,6 +215,35 @@ def buscar(riesgo_min: float = Query(0.0, ge=0, le=1),
     if tamano:     m &= df["rtm_customer_size_d"] == tamano
     df = df[m].sort_values("probabilidad_churn", ascending=False).head(limit)
     return [_resumen(i, r) for i, r in df.iterrows()]
+
+
+class Pregunta(BaseModel):
+    pregunta: str
+    cliente: Optional[str] = None          # opcional: enfocar en un cliente
+    historial: Optional[list[dict]] = None  # opcional: chat multiturno
+
+
+@app.post("/preguntar")
+def preguntar(req: Pregunta):
+    """
+    IA conversacional. Responde preguntas abiertas de negocio sobre la
+    cartera (por qué se pierden clientes, volumen en riesgo, pronósticos,
+    qué priorizar). Usa SOLO las cifras reales del contexto; no inventa.
+
+    Body ejemplo:
+      {"pregunta": "¿Por qué estamos perdiendo clientes en el norte?"}
+      {"pregunta": "¿Qué le pasa a este cliente?", "cliente": "9bb53..."}
+    """
+    if not req.pregunta or not req.pregunta.strip():
+        raise HTTPException(400, "Manda una 'pregunta'.")
+    try:
+        texto = responder(req.pregunta, _DB, _CONTEXTO,
+                          historial=req.historial, cliente_id=req.cliente)
+    except RuntimeError as e:           # falta API key, etc.
+        raise HTTPException(503, str(e))
+    except Exception as e:              # error del LLM / red
+        raise HTTPException(502, f"Error consultando el modelo: {e}")
+    return {"respuesta": texto, "fuente_score": _MODO}
 
 
 @app.get("/")
