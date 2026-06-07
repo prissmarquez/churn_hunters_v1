@@ -1,0 +1,95 @@
+import 'package:flutter/material.dart';
+import '../models/client2.dart';
+import '../constants/app_colors2.dart';
+import '../components/arca_logo2.dart';
+import '../components/risk_gauge2.dart';
+import '../components/filter_bar2.dart';
+
+class RiskDashboardPage extends StatefulWidget {
+  const RiskDashboardPage({super.key});
+
+  @override
+  State<RiskDashboardPage> createState() => _RiskDashboardPageState();
+}
+
+class _RiskDashboardPageState extends State<RiskDashboardPage>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _arcController;
+  late Animation<double> _arcAnimation;
+  String _selectedFilter = 'Clientes en Riesgo';
+  final List<String> _filterOptions = [
+    'Proveedores en Riesgo',
+    'Clientes en Riesgo',
+    'Distribuidores en Riesgo',
+  ];
+
+  final TextEditingController _searchController = TextEditingController();
+  List<Client> _allClients = [];
+  List<Client> _filteredClients = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _arcController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    );
+    _arcAnimation = CurvedAnimation(
+      parent: _arcController,
+      curve: Curves.easeOutCubic,
+    );
+    _arcController.forward();
+
+    _allClients = List.generate(
+      50,
+      (i) => Client(id: 'ID${1000 + i}', risk: 50 + (i % 50)),
+    );
+    _filteredClients = List.from(_allClients);
+  }
+
+  void _searchById() {
+    final id = _searchController.text.trim();
+    setState(() {
+      if (id.isEmpty) {
+        _filteredClients = List.from(_allClients);
+      } else {
+        _filteredClients = _allClients
+            .where((c) => c.id.toLowerCase() == id.toLowerCase())
+            .toList();
+      }
+    });
+  }
+
+  int get _totalRisk =>
+      _filteredClients.isEmpty ? 0 : _filteredClients.fold(0, (sum, c) => sum + c.risk) ~/ _filteredClients.length;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            children: [
+              const ArcaLogo(),
+              const SizedBox(height: 28),
+              AnimatedBuilder(
+                animation: _arcAnimation,
+                builder: (_, __) => RiskGauge(total: _totalRisk, progress: _arcAnimation.value),
+              ),
+              const SizedBox(height: 24),
+              FilterBar(
+                selected: _selectedFilter,
+                options: _filterOptions,
+                searchController: _searchController,
+                onSearch: _searchById,
+                onChanged: (v) => setState(() => _selectedFilter = v),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
