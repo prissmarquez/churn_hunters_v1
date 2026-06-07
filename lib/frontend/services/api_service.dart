@@ -55,6 +55,19 @@ class ApiService {
     return ClientDetail.fromJson(_json(res));
   }
 
+  Future<List<Map<String, dynamic>>> fetchChurnPorMes() async {
+    final res = await http.get(Uri.parse('$baseUrl/churn_por_mes'));
+    if (res.statusCode != 200) throw Exception('Error ${res.statusCode}');
+    final List data = _json(res);
+    return data.cast<Map<String, dynamic>>();
+  }
+
+  Future<Map<String, dynamic>> fetchImpacto() async {
+    final res = await http.get(Uri.parse('$baseUrl/impacto'));
+    if (res.statusCode != 200) throw Exception('Error ${res.statusCode}');
+    return _json(res) as Map<String, dynamic>;
+  }
+
   Future<List<Map<String, dynamic>>> fetchRiesgoPorCoolers() async {
     final res = await http.get(Uri.parse('$baseUrl/riesgo_por_coolers'));
     if (res.statusCode != 200) {

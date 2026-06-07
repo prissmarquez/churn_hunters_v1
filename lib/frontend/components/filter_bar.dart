@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-
 import '../constants/app_colors.dart';
 
 class FilterBar extends StatelessWidget {
@@ -8,6 +7,8 @@ class FilterBar extends StatelessWidget {
   final ValueChanged<String> onChanged;
   final TextEditingController searchController;
   final VoidCallback onSearch;
+  final String selectedSort;
+  final ValueChanged<String> onSortChanged;
 
   const FilterBar({
     super.key,
@@ -16,12 +17,23 @@ class FilterBar extends StatelessWidget {
     required this.onChanged,
     required this.searchController,
     required this.onSearch,
+    required this.selectedSort,
+    required this.onSortChanged,
   });
+
+  static const sortOptions = [
+    _SortOption('riesgo_desc', 'Mayor riesgo primero ↓'),
+    _SortOption('riesgo_asc',  'Menor riesgo primero ↑'),
+    _SortOption('estado_az',   'Estado A → Z'),
+    _SortOption('estado_za',   'Estado Z → A'),
+    _SortOption('id_az',       'ID Alfabético A → Z'),
+  ];
 
   @override
   Widget build(BuildContext context) {
     return Column(
       children: [
+        // ── Búsqueda por ID ────────────────────────────────────────────
         Row(
           children: [
             Expanded(
@@ -38,9 +50,7 @@ class FilterBar extends StatelessWidget {
                   style: const TextStyle(color: whiteColor),
                   decoration: const InputDecoration(
                     hintText: 'Buscar por ID',
-                    hintStyle: TextStyle(
-                      color: Colors.white54,
-                    ),
+                    hintStyle: TextStyle(color: Colors.white54),
                     border: InputBorder.none,
                   ),
                   onSubmitted: (_) => onSearch(),
@@ -56,52 +66,78 @@ class FilterBar extends StatelessWidget {
                 borderRadius: BorderRadius.circular(12),
               ),
               child: IconButton(
-                icon: const Icon(
-                  Icons.search,
-                  color: whiteColor,
-                ),
+                icon: const Icon(Icons.search, color: whiteColor),
                 onPressed: onSearch,
               ),
             ),
           ],
         ),
         const SizedBox(height: 8),
-        Container(
-          width: double.infinity,
-          height: 44,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: Colors.white10),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: selected,
-              dropdownColor: cardColor,
-              iconEnabledColor: whiteColor,
-              isExpanded: true,
-              style: const TextStyle(
-                color: whiteColor,
-                fontSize: 13,
-              ),
-              items: options
-                  .map(
-                    (option) => DropdownMenuItem(
-                      value: option,
-                      child: Text(option),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (value) {
-                if (value != null) {
-                  onChanged(value);
-                }
-              },
-            ),
-          ),
+
+        // ── Filtro por nivel de riesgo ─────────────────────────────────
+        _dropdown(
+          value: selected,
+          items: options
+              .map((o) => DropdownMenuItem(value: o, child: Text(o)))
+              .toList(),
+          onChanged: (v) { if (v != null) onChanged(v); },
+          prefix: const Icon(Icons.flag_outlined,
+              color: AppColors.textSecondary, size: 16),
+        ),
+        const SizedBox(height: 8),
+
+        // ── Ordenamiento ───────────────────────────────────────────────
+        _dropdown(
+          value: selectedSort,
+          items: sortOptions
+              .map((o) => DropdownMenuItem(value: o.key, child: Text(o.label)))
+              .toList(),
+          onChanged: (v) { if (v != null) onSortChanged(v); },
+          prefix: const Icon(Icons.sort, color: AppColors.textSecondary, size: 16),
         ),
       ],
     );
   }
+
+  Widget _dropdown({
+    required String value,
+    required List<DropdownMenuItem<String>> items,
+    required ValueChanged<String?> onChanged,
+    Widget? prefix,
+  }) {
+    return Container(
+      width: double.infinity,
+      height: 44,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        children: [
+          if (prefix != null) ...[prefix, const SizedBox(width: 8)],
+          Expanded(
+            child: DropdownButtonHideUnderline(
+              child: DropdownButton<String>(
+                value: value,
+                dropdownColor: cardColor,
+                iconEnabledColor: whiteColor,
+                isExpanded: true,
+                style: const TextStyle(color: whiteColor, fontSize: 13),
+                items: items,
+                onChanged: onChanged,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SortOption {
+  final String key;
+  final String label;
+  const _SortOption(this.key, this.label);
 }

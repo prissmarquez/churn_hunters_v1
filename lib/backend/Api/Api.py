@@ -43,6 +43,7 @@ SCORE_CAND = ["nivel_riesgo", "nivel", "riesgo", "risk_level", "score"]
 _DB: pd.DataFrame = None
 _MODO = "—"   # "Persona A" o "PROVISIONAL"
 _CONTEXTO = ""  # resumen de la cartera que usa el asistente (se arma al arrancar)
+_SEASON: list = []  # churn rate mensual para gráfica de estacionalidad
 
 
 def _nivel(p):
@@ -97,7 +98,7 @@ def _cargar_scores():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _DB, _MODO, _CONTEXTO
+    global _DB, _MODO, _CONTEXTO, _SEASON
     feats = pd.read_csv(DATA / "customer_features.csv")
     scores = _cargar_scores()
 
@@ -105,7 +106,6 @@ async def lifespan(app: FastAPI):
         _DB = feats.merge(scores, on="customer_id", how="inner")
         _MODO = "Persona A (scores.csv)"
     else:
-        # PROVISIONAL: score heuristico de tus propias features, para no bloquearte
         feats["probabilidad_churn"] = _provisional(feats)
         feats["riesgo"] = feats["probabilidad_churn"].apply(_nivel)
         _DB = feats
@@ -114,6 +114,21 @@ async def lifespan(app: FastAPI):
     _DB = _DB.set_index("customer_id")
     _CONTEXTO = construir_contexto_global(_DB)
     print(f"[API] {len(_DB):,} clientes | fuente del score: {_MODO}")
+
+    # Estacionalidad: churn rate por mes (solo calmonth + target, liviano)
+    try:
+        sales_path = DATA / "sales_churn_train.csv"
+        sm = pd.read_csv(sales_path, usecols=["calmonth", "target"])
+        g = sm.groupby("calmonth")["target"].agg(["mean", "sum", "count"]).reset_index()
+        g = g[g["calmonth"] > 202401]  # excluir ene-2024 (primer mes, anomalía)
+        _SEASON = [
+            {"mes": str(int(r["calmonth"])), "churn_pct": round(float(r["mean"]) * 100, 3)}
+            for _, r in g.iterrows()
+        ]
+        print(f"[API] Estacionalidad cargada: {len(_SEASON)} meses")
+    except Exception as e:
+        print(f"[API] Advertencia: no se pudo cargar estacionalidad: {e}")
+
     yield
 
 
@@ -276,6 +291,31 @@ def preguntar(req: Pregunta):
     except Exception as e:              # error del LLM / red
         raise HTTPException(502, f"Error consultando el modelo: {e}")
     return {"respuesta": texto, "fuente_score": _MODO}
+
+
+@app.get("/churn_por_mes")
+def churn_por_mes():
+    """Churn rate mensual (%) para gráfica de estacionalidad."""
+    return _SEASON
+
+
+@app.get("/impacto")
+def impacto():
+    """Cajas en riesgo por nivel y escenario de retención."""
+    col = "boxes_roll3"
+    cajas_alto  = float(_DB.loc[_DB["riesgo"] == "alto",  col].clip(lower=0).sum()) if col in _DB.columns else 0.0
+    cajas_medio = float(_DB.loc[_DB["riesgo"] == "medio", col].clip(lower=0).sum()) if col in _DB.columns else 0.0
+    n_alto  = int((_DB["riesgo"] == "alto").sum())
+    n_medio = int((_DB["riesgo"] == "medio").sum())
+    return {
+        "cajas_alto":         round(cajas_alto),
+        "cajas_medio":        round(cajas_medio),
+        "cajas_total":        round(cajas_alto + cajas_medio),
+        "clientes_alto":      n_alto,
+        "clientes_medio":     n_medio,
+        "recuperacion_20pct": round(cajas_alto * 0.20),
+        "recuperacion_30pct": round(cajas_alto * 0.30),
+    }
 
 
 @app.get("/riesgo_por_coolers")

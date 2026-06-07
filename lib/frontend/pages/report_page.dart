@@ -14,8 +14,10 @@ class ReportPage extends StatefulWidget {
 class _ReportPageState extends State<ReportPage> {
   final ApiService _api = ApiService();
   Map<String, dynamic>? _resumen;
+  Map<String, dynamic>? _impacto;
   List<BarData> _territorios = [];
   List<BarData> _coolers = [];
+  List<BarData> _temporalidad = [];
 
   // AI answers for each of the 3 business questions
   String? _aiResumen;
@@ -91,6 +93,27 @@ class _ReportPageState extends State<ReportPage> {
       debugPrint('Error coolers: $e');
     }
 
+    // Load business impact
+    try {
+      final imp = await _api.fetchImpacto();
+      setState(() => _impacto = imp);
+    } catch (e) {
+      debugPrint('Error impacto: $e');
+    }
+
+    // Load seasonality chart
+    try {
+      final meses = await _api.fetchChurnPorMes();
+      setState(() => _temporalidad = meses.map((m) {
+            final raw = (m['mes'] ?? '').toString();
+            final label = _mesLabel(raw);
+            final val = ((m['churn_pct'] ?? 0) as num).toDouble();
+            return BarData(label, val);
+          }).toList());
+    } catch (e) {
+      debugPrint('Error estacionalidad: $e');
+    }
+
     // AI: executive summary
     _api.preguntar(_preguntaResumen).then((txt) {
       if (mounted) setState(() => _aiResumen = txt);
@@ -141,6 +164,23 @@ class _ReportPageState extends State<ReportPage> {
     );
   }
 
+  // Convierte "202402" → "Feb 24"
+  String _mesLabel(String raw) {
+    if (raw.length != 6) return raw;
+    const meses = ['', 'Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun',
+                       'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+    final year = raw.substring(2, 4);
+    final month = int.tryParse(raw.substring(4)) ?? 0;
+    if (month < 1 || month > 12) return raw;
+    return '${meses[month]} $year';
+  }
+
+  String _compact(num n) {
+    if (n >= 1e6) return '${(n / 1e6).toStringAsFixed(1)}M';
+    if (n >= 1e3) return '${(n / 1e3).toStringAsFixed(0)}K';
+    return n.toStringAsFixed(0);
+  }
+
   Widget _buildContent() {
     final r = _resumen!;
     final total = (r['total'] as num).toInt();
@@ -188,7 +228,11 @@ class _ReportPageState extends State<ReportPage> {
           _kpi('Clientes en riesgo bajo', '$bajo',
               '${(100 - pctAlto - pctMedio).toStringAsFixed(1)}%',
               const Color(0xFF2ECC71)),
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
+
+          // ── Impacto de negocio ───────────────────────────────────────────
+          if (_impacto != null) _impactoCard(_impacto!),
+          if (_impacto != null) const SizedBox(height: 20),
 
           // ── Donut ────────────────────────────────────────────────────────
           _card(
@@ -206,6 +250,33 @@ class _ReportPageState extends State<ReportPage> {
                 ],
               ),
             ),
+          ),
+          const SizedBox(height: 20),
+
+          // ── Estacionalidad ───────────────────────────────────────────────
+          _card(
+            'Estacionalidad del churn (últimos 24 meses)',
+            Icons.trending_up,
+            _temporalidad.isNotEmpty
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Pico en Feb y Nov · Valle en May y Ago',
+                        style: TextStyle(
+                            color: AppColors.textSecondary, fontSize: 12),
+                      ),
+                      const SizedBox(height: 10),
+                      BarChart(data: _temporalidad, height: 120),
+                    ],
+                  )
+                : Row(children: const [
+                    SizedBox(width: 16, height: 16,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: AppColors.redAccent)),
+                    SizedBox(width: 10),
+                    Text('Cargando...', style: TextStyle(color: AppColors.textSecondary)),
+                  ]),
           ),
           const SizedBox(height: 20),
 
@@ -267,8 +338,7 @@ class _ReportPageState extends State<ReportPage> {
               Icons.kitchen_outlined,
               const Text(
                 'No hay datos de coolers disponibles en la cartera actual.',
-                style: TextStyle(
-                    color: AppColors.textSecondary, fontSize: 13),
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
             ),
           const SizedBox(height: 12),
@@ -279,6 +349,124 @@ class _ReportPageState extends State<ReportPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _impactoCard(Map<String, dynamic> imp) {
+    final cajasAlto  = (imp['cajas_alto']  as num).toInt();
+    final cajasTotal = (imp['cajas_total'] as num).toInt();
+    final rec20      = (imp['recuperacion_20pct'] as num).toInt();
+    final rec30      = (imp['recuperacion_30pct'] as num).toInt();
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF2A0A0A), Color(0xFF1A1A1A)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.redAccent.withValues(alpha: 0.5)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.warning_amber_rounded,
+                  color: AppColors.redAccent, size: 18),
+              SizedBox(width: 8),
+              Text('Impacto de negocio estimado',
+                  style: TextStyle(
+                      color: AppColors.textPrimary,
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _impactoKpi(
+                  _compact(cajasAlto),
+                  'cajas/mes\nen riesgo ALTO',
+                  AppColors.redAccent,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _impactoKpi(
+                  _compact(cajasTotal),
+                  'cajas/mes\nen riesgo total',
+                  AppColors.amber,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: AppColors.border),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Escenario de retención',
+                    style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600)),
+                const SizedBox(height: 8),
+                _scenarioRow('Retener 20% de clientes alto riesgo',
+                    '+${_compact(rec20)} cajas/mes'),
+                const SizedBox(height: 4),
+                _scenarioRow('Retener 30% de clientes alto riesgo',
+                    '+${_compact(rec30)} cajas/mes'),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _impactoKpi(String value, String label, Color color) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value,
+            style: TextStyle(
+                color: color, fontSize: 28, fontWeight: FontWeight.bold)),
+        const SizedBox(height: 2),
+        Text(label,
+            style: const TextStyle(
+                color: AppColors.textSecondary, fontSize: 11, height: 1.4)),
+      ],
+    );
+  }
+
+  Widget _scenarioRow(String label, String value) {
+    return Row(
+      children: [
+        const Icon(Icons.arrow_forward, color: Color(0xFF2ECC71), size: 14),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(label,
+              style: const TextStyle(
+                  color: AppColors.textPrimary, fontSize: 12)),
+        ),
+        Text(value,
+            style: const TextStyle(
+                color: Color(0xFF2ECC71),
+                fontSize: 13,
+                fontWeight: FontWeight.bold)),
+      ],
     );
   }
 
