@@ -55,6 +55,15 @@ class ApiService {
     return ClientDetail.fromJson(_json(res));
   }
 
+  Future<List<Map<String, dynamic>>> fetchRiesgoPorCoolers() async {
+    final res = await http.get(Uri.parse('$baseUrl/riesgo_por_coolers'));
+    if (res.statusCode != 200) {
+      throw Exception('Error ${res.statusCode} en coolers');
+    }
+    final List data = _json(res);
+    return data.cast<Map<String, dynamic>>();
+  }
+
   Future<String> preguntar(
     String pregunta, {
     String? clienteId,
