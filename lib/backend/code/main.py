@@ -1,37 +1,40 @@
 import pandas as pd
 
-# Cargar CSVs
-clientes = pd.read_csv("lib/backend/data/Clientes.csv")
-coolers = pd.read_csv("lib/backend/data/Coolers.csv")
-ventas_train = pd.read_csv("lib/backend/data/sales_churn_train.csv")
-ventas_test = pd.read_csv("lib/backend/data/sales_churn_test.csv")
+DATA = "lib/backend/data/processed/"
+RAW = "lib/backend/data/"
 
-#Ver primeras filas que tenemos 
-print("Clientes:")
-print(clientes.head(), "\n")
+scores = pd.read_csv(DATA + "churn_scores_final.csv")
+sales = pd.read_csv(RAW + "sales_churn_train.csv",
+                    usecols=['customer_id', 'calmonth',
+                             'uni_boxes_sold_m', 'num_transacciones'])
 
-print("Coolers:")
-print(coolers.head(), "\n")
 
-print("Ventas train:")
-print(ventas_train.head(), "\n")
+def historial(cid):
+    h = sales[sales.customer_id == cid].sort_values('calmonth')
+    return h[['calmonth', 'uni_boxes_sold_m', 'num_transacciones']]
 
-print("Ventas test:")
-print(ventas_test.head(), "\n")
 
-#Revisar tipos de datos y nulos
-print("Info Clientes:")
-print(clientes.info(), "\n")
+# 1) Distribucion de niveles de riesgo
+print("=== Distribucion de niveles de riesgo ===")
+dist = scores['nivel_riesgo'].value_counts()
+for nivel, n in dist.items():
+    print(f"{nivel:6s}: {n:7d}  ({n / len(scores) * 100:.1f}%)")
 
-print("Info Coolers:")
-print(coolers.info(), "\n")
+print("\n=== Estadisticas de la probabilidad de churn ===")
+print(scores['probabilidad_churn'].describe())
 
-print("Info Ventas train:")
-print(ventas_train.info(), "\n")
+# 2) Clientes de ALTO riesgo: deberian venir cayendo o ya inactivos
+print("\n========== TOP 3 ALTO RIESGO (deben venir cayendo) ==========")
+altos = scores.sort_values('probabilidad_churn', ascending=False).head(3)
+for _, r in altos.iterrows():
+    print(f"\n>> Cliente {r.customer_id} | riesgo {r.probabilidad_churn:.1%} "
+          f"| drivers: {r.features_influyentes}")
+    print(historial(r.customer_id).to_string(index=False))
 
-# Estadísticas básicas
-print("Estadísticas Ventas train:")
-print(ventas_train.describe(), "\n")
-
-print("Estadísticas Coolers:")
-print(coolers.describe(), "\n")
+# 3) Clientes de BAJO riesgo: deberian comprar estable
+print("\n========== TOP 3 BAJO RIESGO (deben comprar estable) ==========")
+bajos = scores.sort_values('probabilidad_churn', ascending=True).head(3)
+for _, r in bajos.iterrows():
+    print(f"\n>> Cliente {r.customer_id} | riesgo {r.probabilidad_churn:.1%} "
+          f"| drivers: {r.features_influyentes}")
+    print(historial(r.customer_id).to_string(index=False))
