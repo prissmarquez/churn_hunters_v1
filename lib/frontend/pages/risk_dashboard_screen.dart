@@ -9,25 +9,26 @@ import '../components/risk_gauge.dart';
 import '../components/filter_bar.dart';
 import '../components/risk_chart_card.dart';
 
-class RiskDashboardPage extends StatefulWidget {
-  const RiskDashboardPage({super.key});
+class RiskDashboardScreen extends StatefulWidget {
+  const RiskDashboardScreen({super.key});
 
   @override
-  State<RiskDashboardPage> createState() => _RiskDashboardPageState();
+  State<RiskDashboardScreen> createState() =>
+      _RiskDashboardScreenState();
 }
-
-class _RiskDashboardPageState extends State<RiskDashboardPage>
+class _RiskDashboardScreenState
+    extends State<RiskDashboardScreen>
     with SingleTickerProviderStateMixin {
 
   late AnimationController _arcController;
   late Animation<double> _arcAnimation;
 
-  String _selectedFilter = 'Clientes en Riesgo';
+  String _selectedFilter = 'Alto';
 
   final List<String> _filterOptions = [
-    'Proveedores en Riesgo',
-    'Clientes en Riesgo',
-    'Distribuidores en Riesgo',
+    'Alto',
+    'Medio',
+    'Bajo',
   ];
 
   final TextEditingController _searchController =

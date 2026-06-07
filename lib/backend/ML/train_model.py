@@ -2,78 +2,98 @@ import pandas as pd
 import os
 import joblib
 from xgboost import XGBClassifier
-from sklearn.metrics import roc_auc_score, accuracy_score
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import roc_auc_score, classification_report, confusion_matrix
 
 DATA_PATH = "lib/backend/data/processed/"
+RAW_PATH = "lib/backend/data/"
 MODEL_PATH = "lib/backend/data/processed/"
 
-def load_prepared_data():
-    X_train = pd.read_csv(os.path.join(DATA_PATH, "X_train_prepared.csv"))
-    X_test  = pd.read_csv(os.path.join(DATA_PATH, "X_test_prepared.csv"))
-    y_train = pd.read_csv(os.path.join(DATA_PATH, "y_train.csv")).squeeze()  # Convertir a Series
-    try:
-        y_test = pd.read_csv(os.path.join(DATA_PATH, "y_test.csv")).squeeze()
-    except:
-        y_test = None
+# El target real lo construimos como churn del MES SIGUIENTE -> ya no es feature
+DROP_COLS = ['customer_id', 'calmonth', 'target', 'target_next']
 
-    # Guardar IDs para resultados
-    train_ids = X_train['customer_id'] if 'customer_id' in X_train.columns else None
-    test_ids  = X_test['customer_id'] if 'customer_id' in X_test.columns else None
 
-    # Eliminar columnas no numéricas antes de entrenar
-    X_train = X_train.select_dtypes(include=['int64', 'float64'])
-    X_test  = X_test.select_dtypes(include=['int64', 'float64'])
+def load_train_data():
+    """Features del mes t -> predicen churn del mes t+1 (sin leakage)."""
+    X_all = pd.read_csv(os.path.join(DATA_PATH, "X_all_clients_encoded.csv"))
 
-    return X_train, X_test, y_train, y_test, train_ids, test_ids
+    sales = pd.read_csv(os.path.join(RAW_PATH, "sales_churn_train.csv"))
+    sales = sales[['customer_id', 'calmonth', 'target']].drop_duplicates()
+
+    # Ordenar por cliente y mes para poder desplazar el target
+    sales = sales.sort_values(['customer_id', 'calmonth'])
+    # target_next = el churn del MES SIGUIENTE del mismo cliente
+    sales['target_next'] = sales.groupby('customer_id')['target'].shift(-1)
+    # El ultimo mes de cada cliente no tiene "siguiente" -> se descarta
+    sales = sales.dropna(subset=['target_next'])
+    sales['target_next'] = sales['target_next'].astype(int)
+
+    # Pegar el target del mes siguiente a las features del mes actual
+    df_train = X_all.merge(
+        sales[['customer_id', 'calmonth', 'target_next']],
+        on=['customer_id', 'calmonth'], how='inner'
+    )
+
+    y = df_train['target_next']
+    feature_cols = [c for c in df_train.columns if c not in DROP_COLS]
+    X = df_train[feature_cols]
+    return X, y, feature_cols
+
 
 def train_xgboost(X_train, y_train):
+    n_pos = int((y_train == 1).sum())
+    n_neg = int((y_train == 0).sum())
+    scale = (n_neg / n_pos) if n_pos > 0 else 1.0
+    print(f"[INFO] positivos={n_pos}  negativos={n_neg}  scale_pos_weight={scale:.2f}")
+
     model = XGBClassifier(
         n_estimators=200,
         max_depth=5,
         learning_rate=0.1,
         subsample=0.8,
         colsample_bytree=0.8,
+        scale_pos_weight=scale,
         random_state=42,
-        use_label_encoder=False,
-        eval_metric='logloss'
+        eval_metric='logloss',
+        n_jobs=-1,
     )
     model.fit(X_train, y_train)
     return model
 
-def evaluate_model(model, X_test, y_test):
-    if y_test is not None:
-        y_prob = model.predict_proba(X_test)[:, 1]
-        y_pred = model.predict(X_test)
-        auc = roc_auc_score(y_test, y_prob)
-        acc = accuracy_score(y_test, y_pred)
-        print(f"[INFO] AUC: {auc:.4f}, Accuracy: {acc:.4f}")
-    else:
-        print("[WARN] No se encontró y_test, solo se entrenó el modelo.")
 
-def save_model(model, file_name="xgb_churn_model.pkl"):
-    path = os.path.join(MODEL_PATH, file_name)
-    joblib.dump(model, path)
-    print(f"[INFO] Modelo guardado en: {path}")
+def evaluar(model, X_test, y_test):
+    probs = model.predict_proba(X_test)[:, 1]
+    preds = (probs >= 0.5).astype(int)
+    print(f"\n[EVAL] AUC = {roc_auc_score(y_test, probs):.3f}")
+    print("[EVAL] Matriz de confusion (umbral 0.5):")
+    print(confusion_matrix(y_test, preds))
+    print("[EVAL] Reporte de clasificacion:")
+    print(classification_report(y_test, preds, digits=3))
+    print(f"[EVAL] Clientes en test con prob >= 0.80: "
+          f"{(probs >= 0.80).sum()} de {len(probs)}")
+
+
+def save_model(model, feature_cols, file_name="xgb_churn_model.pkl"):
+    os.makedirs(MODEL_PATH, exist_ok=True)
+    joblib.dump(model, os.path.join(MODEL_PATH, file_name))
+    joblib.dump(feature_cols, os.path.join(MODEL_PATH, "feature_cols.pkl"))
+    print(f"[INFO] Modelo guardado en: {file_name}")
+    print(f"[INFO] {len(feature_cols)} features guardadas en feature_cols.pkl")
+
 
 def main():
-    X_train, X_test, y_train, y_test, train_ids, test_ids = load_prepared_data()
-    print("[INFO] Datos cargados.")
+    X, y, feature_cols = load_train_data()
+    print(f"[INFO] Datos de entrenamiento: {X.shape[0]} filas, {X.shape[1]} features")
+
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.2, random_state=42, stratify=y
+    )
 
     model = train_xgboost(X_train, y_train)
     print("[INFO] Modelo entrenado.")
+    evaluar(model, X_test, y_test)
+    save_model(model, feature_cols)
 
-    evaluate_model(model, X_test, y_test)
-    save_model(model)
-
-    # Guardar scores si y_test existe
-    if y_test is not None:
-        y_prob = model.predict_proba(X_test)[:, 1]
-        results_df = pd.DataFrame({
-            'customer_id': test_ids,
-            'score': y_prob
-        })
-        results_df.to_csv(os.path.join(DATA_PATH, "churn_scores.csv"), index=False)
-        print("[INFO] Scores de churn guardados en churn_scores.csv")
 
 if __name__ == "__main__":
     main()

@@ -24,10 +24,31 @@ def clean_data(df):
     cat_cols = df.select_dtypes(include=['object']).columns
     df[cat_cols] = df[cat_cols].fillna('Desconocido')
     
-    # 3. Normalizar nombres de columnas (opcional)
+    # 3. Normalizar nombres de columnas
     df.columns = [col.strip().lower().replace(" ", "_") for col in df.columns]
     
     return df
+
+def merge_all_clients(clientes, sales, coolers):
+    "Merge de todos los clientes con sus features sin duplicados"
+    clientes = clientes.drop_duplicates(subset=['customer_id'])
+
+    # Coolers: agrupar por cliente y mes
+    coolers = coolers.groupby(['customer_id','calmonth'], as_index=False).agg({
+        'num_coolers':'sum',
+        'num_doors':'sum'
+    })
+
+    # Sales: agrupar por cliente y mes
+    sales = sales.groupby(['customer_id','calmonth'], as_index=False).agg({
+        'num_transacciones':'sum',
+        'uni_boxes_sold_m':'sum'
+    })
+
+    # Merge todo
+    df_all = clientes.merge(sales, on='customer_id', how='left')
+    df_all = df_all.merge(coolers, on=['customer_id','calmonth'], how='left')
+    return df_all
 
 def save_processed(df, file_name):
     "Guardar archivo procesado en data/processed"
@@ -36,11 +57,19 @@ def save_processed(df, file_name):
     df.to_csv(file_path, index=False)
     print(f"[INFO] Archivo procesado guardado en: {file_path}")
 
-# Ejecución rápida si se llama directamente
 if __name__ == "__main__":
-    for file_name in os.listdir(RAW_DATA_PATH):
-        if file_name.endswith(".csv"):
-            print(f"[INFO] Procesando archivo: {file_name}")
-            df = load_data(file_name)
-            df_clean = clean_data(df)
-            save_processed(df_clean, file_name)
+    # Cargar CSVs necesarios
+    clientes = load_data("Clientes.csv")
+    sales    = load_data("sales_churn_train.csv")
+    coolers  = load_data("Coolers.csv")
+    
+    # Limpiar cada dataframe
+    clientes_clean = clean_data(clientes)
+    sales_clean    = clean_data(sales)
+    coolers_clean  = clean_data(coolers)
+    
+    # Merge de todos los clientes reales
+    all_clients_df = merge_all_clients(clientes_clean, sales_clean, coolers_clean)
+    
+    # Guardar dataset completo listo para ML
+    save_processed(all_clients_df, "X_all_clients_prepared.csv")

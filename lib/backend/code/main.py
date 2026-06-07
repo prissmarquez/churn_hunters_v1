@@ -1,33 +1,40 @@
 import pandas as pd
-import os
-import matplotlib.pyplot as plt
 
-DATA_PATH = "lib/backend/data/processed/"
-FILE_NAME = "churn_scores_final.csv"
+DATA = "lib/backend/data/processed/"
+RAW = "lib/backend/data/"
 
-# Cargar datos
-df = pd.read_csv(os.path.join(DATA_PATH, FILE_NAME))
+scores = pd.read_csv(DATA + "churn_scores_final.csv")
+sales = pd.read_csv(RAW + "sales_churn_train.csv",
+                    usecols=['customer_id', 'calmonth',
+                             'uni_boxes_sold_m', 'num_transacciones'])
 
-# Cantidad total de clientes
-total_clients = df['customer_id'].nunique()
 
-# Clientes con score >= 0.8 (alto riesgo)
-high_risk_threshold = 0.8
-high_risk = df[df['score'] >= high_risk_threshold]
-num_high_risk = high_risk['customer_id'].nunique()
-percent_high_risk = num_high_risk / total_clients * 100
+def historial(cid):
+    h = sales[sales.customer_id == cid].sort_values('calmonth')
+    return h[['calmonth', 'uni_boxes_sold_m', 'num_transacciones']]
 
-print(f"Cantidad total de clientes: {total_clients}")
-print(f"Clientes en alto riesgo (score ≥ {high_risk_threshold}): {num_high_risk}")
-print(f"Porcentaje de clientes en alto riesgo: {percent_high_risk:.2f}%")
 
-# Histograma general de scores
-plt.figure(figsize=(8,5))
-plt.hist(df['score'], bins=50, color='skyblue', edgecolor='black')
-plt.title('Distribución de la Probabilidad de Churn')
-plt.xlabel('Probabilidad de Churn')
-plt.ylabel('Cantidad de Clientes')
-plt.grid(axis='y', alpha=0.75)
-plt.axvline(high_risk_threshold, color='red', linestyle='--', label=f'Umbral {high_risk_threshold}')
-plt.legend()
-plt.show()
+# 1) Distribucion de niveles de riesgo
+print("=== Distribucion de niveles de riesgo ===")
+dist = scores['nivel_riesgo'].value_counts()
+for nivel, n in dist.items():
+    print(f"{nivel:6s}: {n:7d}  ({n / len(scores) * 100:.1f}%)")
+
+print("\n=== Estadisticas de la probabilidad de churn ===")
+print(scores['probabilidad_churn'].describe())
+
+# 2) Clientes de ALTO riesgo: deberian venir cayendo o ya inactivos
+print("\n========== TOP 3 ALTO RIESGO (deben venir cayendo) ==========")
+altos = scores.sort_values('probabilidad_churn', ascending=False).head(3)
+for _, r in altos.iterrows():
+    print(f"\n>> Cliente {r.customer_id} | riesgo {r.probabilidad_churn:.1%} "
+          f"| drivers: {r.features_influyentes}")
+    print(historial(r.customer_id).to_string(index=False))
+
+# 3) Clientes de BAJO riesgo: deberian comprar estable
+print("\n========== TOP 3 BAJO RIESGO (deben comprar estable) ==========")
+bajos = scores.sort_values('probabilidad_churn', ascending=True).head(3)
+for _, r in bajos.iterrows():
+    print(f"\n>> Cliente {r.customer_id} | riesgo {r.probabilidad_churn:.1%} "
+          f"| drivers: {r.features_influyentes}")
+    print(historial(r.customer_id).to_string(index=False))
