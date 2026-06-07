@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../constants/app_colors2.dart';
+import 'package:churn_v1/frontend/constants/app_colors.dart';
 
 class ClientInfoCard extends StatelessWidget {
   final IconData icon;
