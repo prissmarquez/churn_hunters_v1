@@ -10,7 +10,7 @@ class ArcaApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: appTheme,
-      home: const RiskDashboardPage(),
+      home: const RiskDashboardScreen(),
     );
   }
 }
