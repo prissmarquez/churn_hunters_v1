@@ -1,5 +1,5 @@
+import 'package:churn_v1/frontend/constants/app_colors.dart';
 import 'package:flutter/material.dart';
-import '../constants/app_colors2.dart';
 
 class RiskSummaryCard extends StatelessWidget {
   final String clientId;
