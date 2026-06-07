@@ -8,18 +8,17 @@ import '../components/arca_logo.dart';
 import '../components/risk_gauge.dart';
 import '../components/filter_bar.dart';
 import '../components/risk_chart_card.dart';
+import 'risk_dashboard_page.dart';
 
 class RiskDashboardScreen extends StatefulWidget {
   const RiskDashboardScreen({super.key});
 
   @override
-  State<RiskDashboardScreen> createState() =>
-      _RiskDashboardScreenState();
+  State<RiskDashboardScreen> createState() => _RiskDashboardScreenState();
 }
-class _RiskDashboardScreenState
-    extends State<RiskDashboardScreen>
-    with SingleTickerProviderStateMixin {
 
+class _RiskDashboardScreenState extends State<RiskDashboardScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _arcController;
   late Animation<double> _arcAnimation;
 
@@ -31,8 +30,7 @@ class _RiskDashboardScreenState
     'Bajo',
   ];
 
-  final TextEditingController _searchController =
-      TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
 
   List<Client> _allClients = [];
   List<Client> _filteredClients = [];
@@ -87,19 +85,16 @@ class _RiskDashboardScreenState
     });
   }
 
-  int get _totalRisk =>
-      _filteredClients.isEmpty
-          ? 0
-          : _filteredClients.fold(
-                  0,
-                  (sum, c) => sum + c.risk,
-                ) ~/
-              _filteredClients.length;
+  int get _totalRisk => _filteredClients.isEmpty
+      ? 0
+      : _filteredClients.fold(
+              0,
+              (sum, c) => sum + c.risk,
+            ) ~/
+          _filteredClients.length;
 
   List<double> get _chartData =>
-      _filteredClients
-          .map((c) => c.risk.toDouble())
-          .toList();
+      _filteredClients.map((c) => c.risk.toDouble()).toList();
 
   @override
   Widget build(BuildContext context) {
@@ -136,6 +131,14 @@ class _RiskDashboardScreenState
                   setState(() {
                     _selectedFilter = value;
                   });
+
+                  if (value == 'Alto') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (context) => const RiskDashboardPage(),
+                      ),
+                    );
+                  }
                 },
               ),
 
