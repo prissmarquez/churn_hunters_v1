@@ -1,93 +1,97 @@
 import 'package:flutter/material.dart';
-import '../models/client2.dart';
+
 import '../constants/app_colors2.dart';
-import '../components/arca_logo2.dart';
-import '../components/risk_gauge2.dart';
-import '../components/filter_bar2.dart';
+import '../models/chat_message2.dart';
+import '../components/client_header2.dart';
+import '../components/risk_summary_card2.dart';
+import '../components/client_info_card2.dart';
+import '../components/chat_section2.dart';
+import '../components/risk_history_chart2.dart';
 
-class RiskDashboardPage extends StatefulWidget {
-  const RiskDashboardPage({super.key});
+class RiskDashboardPage extends StatelessWidget {
+  final String clientName;
+  final String clientId;
+  final int riskPercent;
+  final String businessSize;
+  final String state;
+  final List<double> riskHistory;
+  final List<ChatMessage> chatMessages;
 
-  @override
-  State<RiskDashboardPage> createState() => _RiskDashboardPageState();
-}
-
-class _RiskDashboardPageState extends State<RiskDashboardPage>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _arcController;
-  late Animation<double> _arcAnimation;
-  String _selectedFilter = 'Clientes en Riesgo';
-  final List<String> _filterOptions = [
-    'Proveedores en Riesgo',
-    'Clientes en Riesgo',
-    'Distribuidores en Riesgo',
-  ];
-
-  final TextEditingController _searchController = TextEditingController();
-  List<Client> _allClients = [];
-  List<Client> _filteredClients = [];
-
-  @override
-  void initState() {
-    super.initState();
-    _arcController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 1400),
-    );
-    _arcAnimation = CurvedAnimation(
-      parent: _arcController,
-      curve: Curves.easeOutCubic,
-    );
-    _arcController.forward();
-
-    _allClients = List.generate(
-      50,
-      (i) => Client(id: 'ID${1000 + i}', risk: 50 + (i % 50)),
-    );
-    _filteredClients = List.from(_allClients);
-  }
-
-  void _searchById() {
-    final id = _searchController.text.trim();
-    setState(() {
-      if (id.isEmpty) {
-        _filteredClients = List.from(_allClients);
-      } else {
-        _filteredClients = _allClients
-            .where((c) => c.id.toLowerCase() == id.toLowerCase())
-            .toList();
-      }
-    });
-  }
-
-  int get _totalRisk =>
-      _filteredClients.isEmpty ? 0 : _filteredClients.fold(0, (sum, c) => sum + c.risk) ~/ _filteredClients.length;
+  const RiskDashboardPage({
+    super.key,
+    this.clientName = 'Juan Pérez',
+    this.clientId = 'A017',
+    this.riskPercent = 75,
+    this.businessSize = 'Mediana empresa',
+    this.state = 'Puebla',
+    this.riskHistory = const <double>[25, 30, 41, 50, 62, 75],
+    this.chatMessages = const [
+      ChatMessage(
+        text:
+            '¿Cuál ha sido el comportamiento de pago del cliente en los últimos 6 meses?',
+        isUser: true,
+        time: '10:30 AM',
+      ),
+      ChatMessage(
+        text:
+            'El cliente ha presentado 2 pagos tardíos en los últimos 6 meses, con un atraso promedio de 12 días.',
+        isUser: false,
+        time: '10:31 AM',
+      ),
+    ],
+  });
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              const ArcaLogo(),
-              const SizedBox(height: 28),
-              AnimatedBuilder(
-                animation: _arcAnimation,
-                builder: (_, __) => RiskGauge(total: _totalRisk, progress: _arcAnimation.value),
+        child: Column(
+          children: [
+            ClientHeader(name: clientName, id: clientId),
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
+                child: Column(
+                  children: [
+                    RiskSummaryCard(
+                      clientId: clientId,
+                      riskPercent: riskPercent,
+                    ),
+                    const SizedBox(height: 16),
+                    // IntrinsicHeight da una altura acotada a la fila para que
+                    // CrossAxisAlignment.stretch funcione dentro del scroll.
+                    IntrinsicHeight(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Expanded(
+                            child: ClientInfoCard(
+                              icon: Icons.business_outlined,
+                              label: 'Tamaño de Negocio',
+                              value: businessSize,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ClientInfoCard(
+                              icon: Icons.location_on_outlined,
+                              label: 'Estado de Residencia',
+                              value: state,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    ChatSection(initialMessages: chatMessages),
+                    const SizedBox(height: 16),
+                    RiskHistoryChart(data: riskHistory),
+                  ],
+                ),
               ),
-              const SizedBox(height: 24),
-              FilterBar(
-                selected: _selectedFilter,
-                options: _filterOptions,
-                searchController: _searchController,
-                onSearch: _searchById,
-                onChanged: (v) => setState(() => _selectedFilter = v),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
