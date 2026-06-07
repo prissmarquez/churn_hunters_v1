@@ -278,6 +278,24 @@ def preguntar(req: Pregunta):
     return {"respuesta": texto, "fuente_score": _MODO}
 
 
+@app.get("/riesgo_por_coolers")
+def riesgo_por_coolers():
+    """Riesgo promedio (%) agrupado por cantidad de coolers (0 / 1 / 2 / 3+)."""
+    if "coolers_mean" not in _DB.columns:
+        return []
+    df = _DB[["coolers_mean", "probabilidad_churn"]].copy()
+    df["coolers_mean"] = pd.to_numeric(df["coolers_mean"], errors="coerce").fillna(0).clip(lower=0)
+    df["coolers_bucket"] = pd.cut(
+        df["coolers_mean"],
+        bins=[-0.1, 0.5, 1.5, 2.5, float("inf")],
+        labels=["0 coolers", "1 cooler", "2 coolers", "3+ coolers"],
+    )
+    g = (df.groupby("coolers_bucket", observed=True)["probabilidad_churn"]
+         .mean().dropna())
+    return [{"coolers": str(k), "riesgo_pct": round(float(v) * 100, 1)}
+            for k, v in g.items()]
+
+
 @app.get("/")
 def raiz():
     return {"api": "Churn Hunters (Persona B)", "fuente_score": _MODO,

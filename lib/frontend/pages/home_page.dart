@@ -156,6 +156,7 @@ import '../components/filter_bar.dart';
 import '../components/client_list.dart';
 import 'client_analysis_page.dart';
 import 'report_page.dart';
+import 'ai_chat_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -256,13 +257,35 @@ class _HomePageState extends State<HomePage>
 
     return Scaffold(
       backgroundColor: bgColor,
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: redColor,
-        icon: const Icon(Icons.assessment_outlined, color: Colors.white),
-        label: const Text('Reporte', style: TextStyle(color: Colors.white)),
-        onPressed: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ReportPage()),
-        ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            heroTag: 'fab_ia',
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: AppColors.redAccent, width: 1.4),
+            ),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const AiChatPage()),
+            ),
+            child: const Icon(Icons.auto_awesome,
+                color: AppColors.redAccent, size: 22),
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'fab_report',
+            backgroundColor: redColor,
+            icon: const Icon(Icons.assessment_outlined, color: Colors.white),
+            label: const Text('Reporte',
+                style: TextStyle(color: Colors.white)),
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const ReportPage()),
+            ),
+          ),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(
