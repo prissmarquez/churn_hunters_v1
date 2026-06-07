@@ -163,6 +163,38 @@ def _resumen(idx, row):
         tamano=_s(row.get("rtm_customer_size_d")),
     )
 
+@app.get("/resumen")
+def resumen():
+    """Resumen de la cartera: conteos y % por nivel de riesgo."""
+    total = len(_DB)
+    vc = _DB["riesgo"].astype(str).value_counts()
+    n_alto = int(vc.get("alto", 0))
+    n_medio = int(vc.get("medio", 0))
+    n_bajo = int(vc.get("bajo", 0))
+    pct = lambda n: round(n / total * 100, 1) if total else 0.0
+    cajas_alto = 0.0
+    if "boxes_roll3" in _DB.columns:
+        cajas_alto = float(_DB.loc[_DB["riesgo"] == "alto", "boxes_roll3"]
+                           .clip(lower=0).sum())
+    return {
+        "total": total,
+        "alto": n_alto, "medio": n_medio, "bajo": n_bajo,
+        "pct_alto": pct(n_alto),
+        "pct_medio": pct(n_medio),
+        "pct_bajo": pct(n_bajo),
+        "cajas_alto": cajas_alto,
+    }
+
+@app.get("/riesgo_por_territorio")
+def riesgo_por_territorio(top: int = 8):
+    """Riesgo promedio (%) por territorio, para la gráfica de barras."""
+    if "territory_d" not in _DB.columns:
+        return []
+    g = (_DB.groupby("territory_d")["probabilidad_churn"]
+         .mean().sort_values(ascending=False).head(top))
+    return [{"territorio": str(t), "riesgo_pct": round(float(p) * 100, 1)}
+            for t, p in g.items()]
+
 
 @app.get("/clientes", response_model=list[ClienteResumen])
 def listar(limit: int = Query(50, ge=1, le=2000), offset: int = Query(0, ge=0),
