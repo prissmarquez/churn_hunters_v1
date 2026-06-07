@@ -4,7 +4,7 @@ import '../models/client.dart';
 import '../models/client_detail.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://127.0.0.1:8000';
+    static const String baseUrl = 'http://10.22.208.161:8000';
 
   dynamic _json(http.Response res) => jsonDecode(utf8.decode(res.bodyBytes));
 
